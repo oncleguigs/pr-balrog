@@ -1,0 +1,81 @@
+name: 'PR Balrog'
+description: 'You shall not merge — forces PR authors to pass a quiz about their own changes before merge is unlocked'
+author: 'PR Balrog'
+branding:
+  icon: 'shield'
+  color: 'red'
+
+inputs:
+  github-token:
+    description: 'GitHub token for API access (checks, comments, artifacts)'
+    required: true
+    default: ${{ github.token }}
+
+  ai-provider:
+    description: 'AI provider: anthropic | openai | github-models | azure-openai | ollama'
+    required: false
+    default: 'github-models'
+
+  api-key:
+    description: 'API key for the chosen provider. Not required for github-models (uses github-token).'
+    required: false
+    default: ''
+
+  model:
+    description: 'Override the default model for the chosen provider'
+    required: false
+    default: ''
+
+  pass-threshold:
+    description: 'Minimum score percentage required to pass (0-100)'
+    required: false
+    default: '80'
+
+  max-attempts:
+    description: 'Maximum number of answer attempts (0 = unlimited)'
+    required: false
+    default: '3'
+
+  quiz-size:
+    description: 'Number of questions: auto | 3 | 5 | 10. Auto selects based on changed lines.'
+    required: false
+    default: 'auto'
+
+  min-lines-threshold:
+    description: 'Skip quiz if fewer than this many lines were changed'
+    required: false
+    default: '10'
+
+  exclude-patterns:
+    description: 'Comma-separated glob patterns to exclude from the diff (lock files, generated code...)'
+    required: false
+    default: '*.lock,*.min.js,*-lock.json,*.snap,*.pb.go,*_generated.go'
+
+  language:
+    description: 'Quiz language: auto | en | fr | es | de | ... (auto detects from diff)'
+    required: false
+    default: 'auto'
+
+  additional-prompt:
+    description: 'Extra instructions appended to the AI prompt — use to focus questions on specific concerns (security, performance, API contracts...)'
+    required: false
+    default: ''
+
+  pr-number-override:
+    description: 'Override PR number — used when triggered via workflow_dispatch (!balrog retry). Leave empty for normal pull_request events.'
+    required: false
+    default: ''
+
+outputs:
+  quiz-id:
+    description: 'Unique ID of the generated quiz'
+  check-id:
+    description: 'GitHub Check Run ID (use in evaluate step)'
+  comment-id:
+    description: 'ID of the quiz comment posted on the PR'
+  num-questions:
+    description: 'Number of questions generated'
+
+runs:
+  using: 'node20'
+  main: 'dist/generate/index.js'

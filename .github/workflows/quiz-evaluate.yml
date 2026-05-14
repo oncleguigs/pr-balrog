@@ -1,0 +1,29 @@
+name: PR Balrog — Evaluate Answers
+
+on:
+  issue_comment:
+    types: [created]
+
+# Needed to update checks and post result comments
+permissions:
+  checks: write
+  pull-requests: write
+  contents: read
+  actions: write   # read: artifact lookup, write: workflow_dispatch for !balrog retry
+
+jobs:
+  evaluate-quiz:
+    name: Evaluate Quiz Answers
+    runs-on: ubuntu-latest
+    # Only process comments that start with !balrog to avoid unnecessary runs
+    if: startsWith(github.event.comment.body, '!balrog')
+
+    steps:
+      - name: Checkout (needed to run local action)
+        uses: actions/checkout@v4
+
+      - name: Evaluate answers
+        uses: ./evaluate
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          language: 'auto'

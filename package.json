@@ -1,0 +1,48 @@
+{
+  "name": "pr-balrog",
+  "version": "0.1.0",
+  "description": "You shall not merge — a PR quiz gate that blocks merge until the author proves they understand their own code",
+  "main": "dist/generate.js",
+  "scripts": {
+    "build": "tsc && node scripts/bundle.js",
+    "build:generate": "ncc build src/generate.ts -o dist/generate --source-map --license licenses.txt",
+    "build:evaluate": "ncc build src/evaluate.ts -o dist/evaluate --source-map --license licenses.txt",
+    "build:all": "npm run build:generate && npm run build:evaluate",
+    "typecheck": "tsc --noEmit",
+    "test": "jest",
+    "test:watch": "jest --watch",
+    "lint": "eslint src --ext .ts"
+  },
+  "keywords": [
+    "github-action",
+    "quiz",
+    "code-review",
+    "pr",
+    "ai"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "@actions/artifact": "^2.1.11",
+    "@actions/core": "^1.11.1",
+    "@actions/github": "^6.0.0",
+    "@anthropic-ai/sdk": "^0.39.0",
+    "@octokit/rest": "^21.1.1",
+    "adm-zip": "^0.5.17",
+    "openai": "^4.97.0",
+    "zod": "^3.24.4"
+  },
+  "devDependencies": {
+    "@types/adm-zip": "^0.5.8",
+    "@types/jest": "^29.5.14",
+    "@types/node": "^22.15.17",
+    "@typescript-eslint/eslint-plugin": "^8.32.0",
+    "@typescript-eslint/parser": "^8.32.0",
+    "@vercel/ncc": "^0.38.3",
+    "eslint": "^9.26.0",
+    "jest": "^29.7.0",
+    "ts-jest": "^29.3.4",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.8.3"
+  }
+}

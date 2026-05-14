@@ -1,0 +1,11 @@
+node_modules/
+*.js.map
+.env
+.env.local
+coverage/
+*.tsbuildinfo
+# keep dist/*/index.js (needed by GitHub Actions) but exclude maps and type decls
+dist/**/*.map
+dist/**/*.d.ts
+dist/**/*.d.ts.map
+dist/**/licenses.txt

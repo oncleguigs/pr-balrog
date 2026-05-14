@@ -1,0 +1,25 @@
+name: 'PR Balrog — Evaluate'
+description: 'Evaluates quiz answers posted as PR comments and updates the merge gate check'
+author: 'PR Balrog'
+
+inputs:
+  github-token:
+    description: 'GitHub token'
+    required: true
+    default: ${{ github.token }}
+  language:
+    description: 'Language override (auto = detect from quiz)'
+    required: false
+    default: 'auto'
+
+outputs:
+  score:
+    description: 'Score achieved (0-100)'
+  passed:
+    description: 'Whether the quiz was passed'
+  attempts-used:
+    description: 'Total attempts used so far'
+
+runs:
+  using: 'node20'
+  main: '../dist/evaluate/index.js'

@@ -1,6 +1,6 @@
 import * as core from '@actions/core'
 import * as github from '@actions/github'
-import { parseAnswerComment, parseCheckboxAnswers, evaluateQuiz, renderResultComment, renderLockedQuizComment } from './quiz'
+import { parseAnswerComment, parseCheckboxAnswers, evaluateQuiz, renderResultComment, renderLockedQuizComment, renderQuizCommentCheckbox } from './quiz'
 import {
   loadQuizArtifact,
   saveQuizArtifact,
@@ -211,13 +211,20 @@ async function run(): Promise<void> {
     const resultBody = renderResultComment({ ...result, quiz: updatedQuiz }, lang)
     await postComment(octokit, ctx, resultBody)
 
-    // Lock the quiz comment so the author can't re-submit by editing checkboxes
+    // Update the quiz comment: reset checkboxes for next attempt, or lock when done
     if (isCheckbox) {
       const targetCommentId = quizCommentId ?? await findQuizComment(octokit, ctx, quiz.id)
       if (targetCommentId) {
-        const locked = renderLockedQuizComment(updatedQuiz, lang)
-        await updateComment(octokit, ctx, targetCommentId, locked)
-        core.info(`Locked quiz comment #${targetCommentId}`)
+        const attemptsExhausted = updatedQuiz.maxAttempts > 0 && updatedQuiz.attemptsUsed >= updatedQuiz.maxAttempts
+        if (result.passed || attemptsExhausted) {
+          const locked = renderLockedQuizComment(updatedQuiz, lang)
+          await updateComment(octokit, ctx, targetCommentId, locked)
+          core.info(`Locked quiz comment #${targetCommentId}`)
+        } else {
+          const reset = renderQuizCommentCheckbox(updatedQuiz, lang)
+          await updateComment(octokit, ctx, targetCommentId, reset)
+          core.info(`Reset quiz comment #${targetCommentId} for next attempt`)
+        }
       }
     }
 

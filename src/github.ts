@@ -194,6 +194,26 @@ export async function updateComment(
   })
 }
 
+export async function findQuizComment(
+  octokit: Octokit,
+  ctx: RepoContext,
+  quizId: string,
+): Promise<number | null> {
+  const marker = `<!-- balrog-quiz-id: ${quizId} -->`
+  // Paginate to handle PRs with many comments
+  for await (const page of octokit.paginate.iterator(octokit.rest.issues.listComments, {
+    owner: ctx.owner,
+    repo: ctx.repo,
+    issue_number: ctx.prNumber,
+    per_page: 100,
+  })) {
+    for (const comment of page.data) {
+      if ((comment.body ?? '').includes(marker)) return comment.id
+    }
+  }
+  return null
+}
+
 // ---------------------------------------------------------------------------
 // Artifact storage (quiz + answers)
 // ---------------------------------------------------------------------------

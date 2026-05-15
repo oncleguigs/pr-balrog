@@ -1,7 +1,7 @@
 import * as core from '@actions/core'
 import * as github from '@actions/github'
-import type { AIProvider, QuizSize } from './types'
-import { pickQuizSize, buildQuiz, renderQuizComment } from './quiz'
+import type { AIProvider, AnswerMode, QuizSize } from './types'
+import { pickQuizSize, buildQuiz, renderQuizComment, renderQuizCommentCheckbox } from './quiz'
 import {
   fetchFilteredDiff,
   createPendingCheck,
@@ -22,6 +22,7 @@ async function run(): Promise<void> {
   const excludeRaw = core.getInput('exclude-patterns') || '*.lock,*.min.js,*-lock.json,*.snap'
   const language = core.getInput('language') || 'auto'
   const additionalPrompt = core.getInput('additional-prompt') || undefined
+  const answerMode = (core.getInput('answer-mode') || 'command') as AnswerMode
 
   const excludePatterns = excludeRaw
     .split(',')
@@ -102,13 +103,16 @@ async function run(): Promise<void> {
   const questions = await adapter.generateQuiz({ diff, numQuestions, language, additionalPrompt })
 
   // Persist quiz + correct answers as artifact (author can't see this)
-  const quiz = buildQuiz(questions, ctx.prNumber, ctx.headSha, passThreshold, maxAttempts)
+  const quiz = buildQuiz(questions, ctx.prNumber, ctx.headSha, passThreshold, maxAttempts, answerMode)
   await saveQuizArtifact(quiz)
 
   // Post quiz comment (without correct answers)
-  const commentBody = renderQuizComment(quiz, language === 'auto' ? 'en' : language)
+  const lang = language === 'auto' ? 'en' : language
+  const commentBody = answerMode === 'checkbox'
+    ? renderQuizCommentCheckbox(quiz, lang)
+    : renderQuizComment(quiz, lang)
   const commentId = await postComment(octokit, ctx, commentBody)
-  core.info(`Posted quiz comment #${commentId}`)
+  core.info(`Posted quiz comment #${commentId} (mode: ${answerMode})`)
 
   // Create pending check — this is what blocks the merge
   const checkId = await createPendingCheck(octokit, ctx)

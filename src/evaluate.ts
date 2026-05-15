@@ -1,14 +1,17 @@
 import * as core from '@actions/core'
 import * as github from '@actions/github'
-import { parseAnswerComment, evaluateQuiz, renderResultComment } from './quiz'
+import { parseAnswerComment, parseCheckboxAnswers, evaluateQuiz, renderResultComment, renderLockedQuizComment } from './quiz'
 import {
   loadQuizArtifact,
   saveQuizArtifact,
   postComment,
+  updateComment,
   findExistingCheck,
+  findQuizComment,
   updateCheckSuccess,
   updateCheckFailure,
 } from './github'
+import type { SubmittedAnswers } from './types'
 
 const RETRY_REGEX = /^!balrog\s+retry\s*$/im
 const RETRY_FORCE_REGEX = /^!balrog\s+retry\s+--force\s*$/im
@@ -37,6 +40,8 @@ async function run(): Promise<void> {
 
   const comment = payload.comment
   const issue = payload.issue
+  const eventName = github.context.eventName
+  const eventAction = payload.action as string | undefined
 
   if (!comment || !issue) {
     core.info('Not a comment event, skipping')
@@ -49,10 +54,13 @@ async function run(): Promise<void> {
   }
 
   const prNumber = issue.number as number
-  const commenterLogin = (comment.user as { login: string }).login
+  // For 'edited' events the actor is payload.sender, not comment.user (which is the original poster)
+  const commenterLogin = eventAction === 'edited'
+    ? ((payload.sender as { login: string } | undefined)?.login ?? (comment.user as { login: string }).login)
+    : (comment.user as { login: string }).login
   const commentBody = comment.body as string
 
-  core.info(`Comment on PR #${prNumber} by @${commenterLogin}`)
+  core.info(`Comment on PR #${prNumber} by @${commenterLogin} (action: ${eventAction})`)
 
   // Verify the commenter is the PR author before doing anything
   const prData = await octokit.rest.pulls.get({
@@ -136,7 +144,33 @@ async function run(): Promise<void> {
   }
 
   // ---------------------------------------------------------------------------
-  // !balrog <answers> — evaluate answers
+  // Checkbox mode — edited event from the quiz comment itself
+  // ---------------------------------------------------------------------------
+  if (eventAction === 'edited') {
+    // Only handle edits to the quiz comment (identified by the hidden marker)
+    if (!commentBody.includes('<!-- balrog-mode: checkbox -->')) {
+      core.info('Edited comment is not an active checkbox quiz, skipping')
+      return
+    }
+
+    // Verify editor is the PR author
+    if (commenterLogin !== ctx.authorLogin) {
+      core.info(`Checkbox edit from @${commenterLogin}, not PR author @${ctx.authorLogin}, skipping`)
+      return
+    }
+
+    const checkboxAnswers = parseCheckboxAnswers(commentBody)
+    if (!checkboxAnswers) {
+      core.info('Submit checkbox not checked yet, skipping')
+      return
+    }
+
+    await handleEvaluation(checkboxAnswers, prNumber, comment.id as number, true)
+    return
+  }
+
+  // ---------------------------------------------------------------------------
+  // !balrog <answers> — evaluate answers (command mode)
   // ---------------------------------------------------------------------------
   const answers = parseAnswerComment(commentBody)
   if (!answers) {
@@ -145,51 +179,70 @@ async function run(): Promise<void> {
   }
 
   core.info(`Parsed answers: ${JSON.stringify(answers)}`)
+  await handleEvaluation(answers, prNumber, null, false)
 
-  const quiz = await loadQuizArtifact(prNumber, octokit, repo.owner, repo.repo, token)
-  if (!quiz) {
-    core.warning(`No quiz found for PR #${prNumber}. Was the generate workflow run?`)
-    await postComment(octokit, ctx,
-      '⚠️ No quiz found for this PR. Type `!balrog retry` or push a new commit to regenerate it.')
-    return
+  // ---------------------------------------------------------------------------
+  // Shared evaluation logic
+  // ---------------------------------------------------------------------------
+  async function handleEvaluation(
+    submittedAnswers: SubmittedAnswers,
+    prNum: number,
+    quizCommentId: number | null,
+    isCheckbox: boolean,
+  ): Promise<void> {
+    const quiz = await loadQuizArtifact(prNum, octokit, repo.owner, repo.repo, token)
+    if (!quiz) {
+      core.warning(`No quiz found for PR #${prNum}. Was the generate workflow run?`)
+      await postComment(octokit, ctx,
+        '⚠️ No quiz found for this PR. Type `!balrog retry` or push a new commit to regenerate it.')
+      return
+    }
+
+    if (quiz.maxAttempts > 0 && quiz.attemptsUsed >= quiz.maxAttempts) {
+      await postComment(octokit, ctx, EXHAUSTED_MESSAGE_EN(commenterLogin, quiz.maxAttempts))
+      return
+    }
+
+    const result = evaluateQuiz(quiz, submittedAnswers)
+    const updatedQuiz = { ...quiz, attemptsUsed: quiz.attemptsUsed + 1, passed: result.passed }
+    await saveQuizArtifact(updatedQuiz)
+
+    const lang = language === 'auto' ? detectLanguage(quiz) : language
+    const resultBody = renderResultComment({ ...result, quiz: updatedQuiz }, lang)
+    await postComment(octokit, ctx, resultBody)
+
+    // Lock the quiz comment so the author can't re-submit by editing checkboxes
+    if (isCheckbox) {
+      const targetCommentId = quizCommentId ?? await findQuizComment(octokit, ctx, quiz.id)
+      if (targetCommentId) {
+        const locked = renderLockedQuizComment(updatedQuiz, lang)
+        await updateComment(octokit, ctx, targetCommentId, locked)
+        core.info(`Locked quiz comment #${targetCommentId}`)
+      }
+    }
+
+    const checkId = await findExistingCheck(octokit, ctx)
+    if (!checkId) {
+      core.warning('No existing check found — was quiz-generate run? Cannot update merge gate.')
+      return
+    }
+
+    const attemptsLeft = quiz.maxAttempts === 0
+      ? Infinity
+      : quiz.maxAttempts - updatedQuiz.attemptsUsed
+
+    if (result.passed) {
+      await updateCheckSuccess(octokit, ctx, checkId, result.score)
+      core.info(`Quiz PASSED — ${result.score}% — merge unblocked`)
+    } else {
+      await updateCheckFailure(octokit, ctx, checkId, result.score, attemptsLeft === Infinity ? -1 : attemptsLeft)
+      core.info(`Quiz FAILED — ${result.score}% — ${attemptsLeft} attempts left`)
+    }
+
+    core.setOutput('score', String(result.score))
+    core.setOutput('passed', String(result.passed))
+    core.setOutput('attempts-used', String(updatedQuiz.attemptsUsed))
   }
-
-  // Check attempt limits — inform and stop, don't silently ignore
-  if (quiz.maxAttempts > 0 && quiz.attemptsUsed >= quiz.maxAttempts) {
-    await postComment(octokit, ctx, EXHAUSTED_MESSAGE_EN(commenterLogin, quiz.maxAttempts))
-    return
-  }
-
-  // Evaluate
-  const result = evaluateQuiz(quiz, answers)
-  const updatedQuiz = { ...quiz, attemptsUsed: quiz.attemptsUsed + 1, passed: result.passed }
-  await saveQuizArtifact(updatedQuiz)
-
-  const lang = language === 'auto' ? detectLanguage(quiz) : language
-  const resultBody = renderResultComment({ ...result, quiz: updatedQuiz }, lang)
-  await postComment(octokit, ctx, resultBody)
-
-  const checkId = await findExistingCheck(octokit, ctx)
-  if (!checkId) {
-    core.warning('No existing check found — was quiz-generate run? Cannot update merge gate.')
-    return
-  }
-
-  const attemptsLeft = quiz.maxAttempts === 0
-    ? Infinity
-    : quiz.maxAttempts - updatedQuiz.attemptsUsed
-
-  if (result.passed) {
-    await updateCheckSuccess(octokit, ctx, checkId, result.score)
-    core.info(`Quiz PASSED — ${result.score}% — merge unblocked`)
-  } else {
-    await updateCheckFailure(octokit, ctx, checkId, result.score, attemptsLeft === Infinity ? -1 : attemptsLeft)
-    core.info(`Quiz FAILED — ${result.score}% — ${attemptsLeft} attempts left`)
-  }
-
-  core.setOutput('score', String(result.score))
-  core.setOutput('passed', String(result.passed))
-  core.setOutput('attempts-used', String(updatedQuiz.attemptsUsed))
 }
 
 function detectLanguage(quiz: { questions: { text: string }[] }): string {

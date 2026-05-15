@@ -27,10 +27,11 @@ export class OpenAIAdapter implements AIAdapter {
   }
 }
 
-// GitHub Models uses the OpenAI-compatible endpoint with the GITHUB_TOKEN
+// GitHub Models uses the OpenAI-compatible endpoint with the GITHUB_TOKEN.
+// Models use namespaced IDs: publisher/model-name (e.g. openai/gpt-4o).
 export class GitHubModelsAdapter extends OpenAIAdapter {
-  constructor(token: string, model = 'gpt-4o') {
-    super(token, model, 'https://models.inference.ai.azure.com')
+  constructor(token: string, model = 'openai/gpt-4o') {
+    super(token, model, 'https://models.github.ai/inference')
   }
 }
 

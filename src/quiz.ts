@@ -81,13 +81,14 @@ function attemptsLabel(used: number, max: number, isFr: boolean): string {
 export function renderQuizComment(quiz: Quiz, language = 'en'): string {
   const isFr = language.startsWith('fr')
   const n = quiz.questions.length
-  const maxLabel = quiz.maxAttempts === 0 ? '∞' : String(quiz.maxAttempts)
+  const remaining = quiz.maxAttempts === 0 ? Infinity : quiz.maxAttempts - quiz.attemptsUsed
+  const maxLabel = quiz.maxAttempts === 0 ? '∞' : String(remaining)
 
   const t = {
     title:       isFr ? `🔥 PR Balrog — ${n} question${n > 1 ? 's' : ''} avant le merge` : `🔥 PR Balrog — ${n} question${n > 1 ? 's' : ''} before merge`,
     subtitle:    isFr ? '> **You shall not pass** — prouve que tu comprends tes propres changements.' : '> **You shall not pass** — prove you understand your own changes.',
     threshold:   isFr ? 'Seuil' : 'Threshold',
-    attempts:    isFr ? 'Tentatives' : 'Attempts',
+    attempts:    isFr ? 'Tentatives restantes' : 'Attempts left',
     howto:       isFr ? '**Comment répondre :**' : '**How to answer:**',
     multi:       isFr ? '*(plusieurs réponses)*' : '*(multiple answers)*',
     retry:       isFr ? 'Plus de tentatives ? Tapez `!balrog retry`.' : 'Out of attempts? Type `!balrog retry`.',
@@ -183,6 +184,9 @@ export function renderResultComment(result: QuizResult, language = 'en'): string
       : '> 🔒 No attempts left — type `!balrog retry` or push a commit to get a fresh quiz.')
   }
 
+  lines.push('')
+  lines.push('<!-- balrog-result -->')
+
   return lines.join('\n')
 }
 
@@ -194,16 +198,17 @@ export function renderResultComment(result: QuizResult, language = 'en'): string
 // Checkbox quiz comment
 // ---------------------------------------------------------------------------
 
-export function renderQuizCommentCheckbox(quiz: Quiz, language = 'en'): string {
+export function renderQuizCommentCheckbox(quiz: Quiz, language = 'en', previousAnswers?: SubmittedAnswers): string {
   const isFr = language.startsWith('fr')
   const n = quiz.questions.length
-  const maxLabel = quiz.maxAttempts === 0 ? '∞' : String(quiz.maxAttempts)
+  const remaining = quiz.maxAttempts === 0 ? Infinity : quiz.maxAttempts - quiz.attemptsUsed
+  const maxLabel = quiz.maxAttempts === 0 ? '∞' : String(remaining)
 
   const t = {
     title:    isFr ? `🔥 PR Balrog — ${n} question${n > 1 ? 's' : ''} avant le merge` : `🔥 PR Balrog — ${n} question${n > 1 ? 's' : ''} before merge`,
     subtitle: isFr ? '> **You shall not pass** — prouve que tu comprends tes propres changements.' : '> **You shall not pass** — prove you understand your own changes.',
     threshold: isFr ? 'Seuil' : 'Threshold',
-    attempts:  isFr ? 'Tentatives' : 'Attempts',
+    attempts:  isFr ? 'Tentatives restantes' : 'Attempts left',
     howto:    isFr ? '**Comment répondre :** Coche tes réponses puis coche **✅ Soumettre**.' : '**How to answer:** Check your answers then check **✅ Submit my answers**.',
     multi:    isFr ? '*(plusieurs réponses)*' : '*(multiple answers)*',
     submit:   isFr ? '✅ Soumettre mes réponses' : '✅ Submit my answers',
@@ -227,12 +232,14 @@ export function renderQuizCommentCheckbox(quiz: Quiz, language = 'en'): string {
   ]
 
   for (const q of quiz.questions) {
+    const qKey = String(q.id)
+    const prev = previousAnswers?.[qKey] ?? []
     const multiTag = q.multi ? ` ${t.multi} ` : ''
     lines.push(`**Q${q.id}.** ${multiTag}${q.text}`)
     lines.push('')
-    lines.push(`- [ ] **Q${q.id}A)** ${q.options[0]}`)
-    lines.push(`- [ ] **Q${q.id}B)** ${q.options[1]}`)
-    lines.push(`- [ ] **Q${q.id}C)** ${q.options[2]}`)
+    lines.push(`- [${prev.includes('A') ? 'x' : ' '}] **Q${q.id}A)** ${q.options[0]}`)
+    lines.push(`- [${prev.includes('B') ? 'x' : ' '}] **Q${q.id}B)** ${q.options[1]}`)
+    lines.push(`- [${prev.includes('C') ? 'x' : ' '}] **Q${q.id}C)** ${q.options[2]}`)
     lines.push('')
   }
 
@@ -278,7 +285,8 @@ export function parseCheckboxAnswers(body: string): SubmittedAnswers | null {
 export function renderLockedQuizComment(quiz: Quiz, language = 'en'): string {
   const isFr = language.startsWith('fr')
   const n = quiz.questions.length
-  const maxLabel = quiz.maxAttempts === 0 ? '∞' : String(quiz.maxAttempts)
+  const remaining = quiz.maxAttempts === 0 ? Infinity : quiz.maxAttempts - quiz.attemptsUsed
+  const maxLabel = quiz.maxAttempts === 0 ? '∞' : String(remaining)
 
   const banner = isFr
     ? '> 🔒 **Réponses soumises** — ce quiz est verrouillé. Attendez le résultat ci-dessous.'
@@ -287,7 +295,7 @@ export function renderLockedQuizComment(quiz: Quiz, language = 'en'): string {
   const t = {
     title:    isFr ? `🔥 PR Balrog — ${n} question${n > 1 ? 's' : ''} avant le merge` : `🔥 PR Balrog — ${n} question${n > 1 ? 's' : ''} before merge`,
     threshold: isFr ? 'Seuil' : 'Threshold',
-    attempts:  isFr ? 'Tentatives' : 'Attempts',
+    attempts:  isFr ? 'Tentatives restantes' : 'Attempts left',
     multi:    isFr ? '*(plusieurs réponses)*' : '*(multiple answers)*',
   }
 

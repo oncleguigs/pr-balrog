@@ -8,6 +8,7 @@ import {
   updateComment,
   findExistingCheck,
   findQuizComment,
+  findBalrogResultComment,
   updateCheckSuccess,
   updateCheckFailure,
 } from './github'
@@ -209,7 +210,13 @@ async function run(): Promise<void> {
 
     const lang = language === 'auto' ? detectLanguage(quiz) : language
     const resultBody = renderResultComment({ ...result, quiz: updatedQuiz }, lang)
-    await postComment(octokit, ctx, resultBody)
+    const existingResultId = await findBalrogResultComment(octokit, ctx)
+    if (existingResultId) {
+      await updateComment(octokit, ctx, existingResultId, resultBody)
+      core.info(`Updated result comment #${existingResultId}`)
+    } else {
+      await postComment(octokit, ctx, resultBody)
+    }
 
     // Update the quiz comment: reset checkboxes for next attempt, or lock when done
     if (isCheckbox) {
@@ -221,7 +228,7 @@ async function run(): Promise<void> {
           await updateComment(octokit, ctx, targetCommentId, locked)
           core.info(`Locked quiz comment #${targetCommentId}`)
         } else {
-          const reset = renderQuizCommentCheckbox(updatedQuiz, lang)
+          const reset = renderQuizCommentCheckbox(updatedQuiz, lang, submittedAnswers)
           await updateComment(octokit, ctx, targetCommentId, reset)
           core.info(`Reset quiz comment #${targetCommentId} for next attempt`)
         }

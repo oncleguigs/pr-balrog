@@ -14,7 +14,10 @@ async function run(): Promise<void> {
   const token = core.getInput('github-token', { required: true })
   const provider = core.getInput('ai-provider') as AIProvider
   const apiKey = core.getInput('api-key') || token // github-models falls back to GITHUB_TOKEN
-  const model = core.getInput('model') || undefined
+  // model_override comes from !balrog model:<name> dispatched via workflow_dispatch
+  const modelOverride = github.context.payload.inputs?.model_override as string | undefined
+  const model = modelOverride || core.getInput('model') || undefined
+  if (modelOverride) core.info(`Model override from !balrog model command: ${modelOverride}`)
   const passThreshold = parseInt(core.getInput('pass-threshold') || '80', 10)
   const maxAttempts = parseInt(core.getInput('max-attempts') || '3', 10)
   const quizSizeOverride = core.getInput('quiz-size') || 'auto'

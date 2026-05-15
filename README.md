@@ -46,9 +46,13 @@ on:
   workflow_dispatch:
     inputs:
       pr_number:
-        description: 'PR number to regenerate quiz for (used by !balrog retry)'
+        description: 'PR number to regenerate quiz for (used by !balrog retry / !balrog model:)'
         required: true
         type: number
+      model_override:
+        description: 'Model to use (used by !balrog model:<name>)'
+        required: false
+        type: string
 
 permissions:
   checks: write
@@ -114,6 +118,7 @@ The built `dist/` is committed — no build step needed.
 ```yaml
 ai-provider: github-models
 # No extra secret needed — uses GITHUB_TOKEN
+# model: openai/gpt-4o   # optional — see GitHub Models catalog below
 ```
 
 **Option B — Anthropic Claude**
@@ -209,6 +214,7 @@ Balrog then posts the result:
 | `!balrog 1:A 2:B,C 3:A` | PR author | Submit answers |
 | `!balrog retry` | PR author | Request a fresh quiz (only when attempts are exhausted) |
 | `!balrog retry --force` | Repo admins | Force-reset the quiz regardless of remaining attempts |
+| `!balrog model:openai/gpt-4o-mini` | PR author | Regenerate quiz using a specific model |
 
 ---
 
@@ -219,7 +225,7 @@ Balrog then posts the result:
 | `github-token` | `${{ github.token }}` | GitHub token |
 | `ai-provider` | `github-models` | `anthropic` \| `openai` \| `github-models` \| `azure-openai` \| `ollama` |
 | `api-key` | — | API key (not needed for `github-models`) |
-| `model` | provider default | Override the AI model |
+| `model` | provider default | Override the AI model (see catalog below for github-models IDs) |
 | `pass-threshold` | `80` | Minimum score % to pass |
 | `max-attempts` | `3` | Max answer attempts (0 = unlimited) |
 | `quiz-size` | `auto` | `3` \| `5` \| `10` \| `auto` |
@@ -235,6 +241,34 @@ Balrog then posts the result:
 | < 100 | 3 |
 | 100 – 500 | 5 |
 | > 500 | 10 |
+
+---
+
+### GitHub Models catalog
+
+Model IDs use the format `publisher/model-name`. Default is `openai/gpt-4o`.
+
+> **Note:** GitHub Models free tier has rate limits. Heavy PR traffic may hit them. For production use, prefer Anthropic or OpenAI with an explicit API key.
+
+| Publisher | Model ID | Notes |
+|---|---|---|
+| OpenAI | `openai/gpt-4o` | Default. Best quality. |
+| OpenAI | `openai/gpt-4o-mini` | Faster, cheaper, slightly lower quality. |
+| OpenAI | `openai/o1` | Reasoning model — slower but better for complex code. |
+| OpenAI | `openai/o3-mini` | Fast reasoning. |
+| Microsoft | `microsoft/Phi-3.5-MoE-instruct` | Good for code. |
+| Microsoft | `microsoft/Phi-3.5-mini-instruct` | Lightweight. |
+| Meta | `meta/Meta-Llama-3.1-405B-Instruct` | Large open model. |
+| Meta | `meta/Meta-Llama-3.1-70B-Instruct` | Balanced. |
+| Mistral AI | `mistral-ai/Mistral-large` | Strong code understanding. |
+| Mistral AI | `mistral-ai/Mistral-nemo` | Fast and compact. |
+| Cohere | `cohere/Cohere-command-r-plus` | Good for reasoning. |
+
+Switch models per-PR without changing workflow config:
+
+```
+!balrog model:openai/o1
+```
 
 ---
 

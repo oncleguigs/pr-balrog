@@ -22,7 +22,15 @@ inputs:
     default: ''
 
   model:
-    description: 'Override the default model for the chosen provider'
+    description: |
+      Override the default model for the chosen provider. Examples:
+        anthropic:     claude-sonnet-4-6, claude-opus-4-7, claude-haiku-4-5-20251001
+        openai:        gpt-4o, gpt-4o-mini, o1, o3-mini
+        github-models: openai/gpt-4o, openai/gpt-4o-mini, openai/o1, openai/o3-mini,
+                       microsoft/Phi-3.5-MoE-instruct, microsoft/Phi-3.5-mini-instruct,
+                       meta/Meta-Llama-3.1-405B-Instruct, meta/Meta-Llama-3.1-70B-Instruct,
+                       mistral-ai/Mistral-large, mistral-ai/Mistral-nemo,
+                       cohere/Cohere-command-r-plus
     required: false
     default: ''
 

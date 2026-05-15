@@ -12,6 +12,7 @@ import {
 
 const RETRY_REGEX = /^!balrog\s+retry\s*$/im
 const RETRY_FORCE_REGEX = /^!balrog\s+retry\s+--force\s*$/im
+const MODEL_OVERRIDE_REGEX = /^!balrog\s+model:([\w.\-/]+)\s*$/im
 
 const EXHAUSTED_MESSAGE_EN = (author: string, max: number) =>
   `## 🔥 You shall not pass — attempts exhausted
@@ -103,6 +104,26 @@ async function run(): Promise<void> {
 
   if (commenterLogin !== ctx.authorLogin) {
     core.info(`Comment from @${commenterLogin}, not the PR author @${ctx.authorLogin}, skipping`)
+    return
+  }
+
+  // ---------------------------------------------------------------------------
+  // !balrog model:<name> — regenerate quiz with a specific model override
+  // ---------------------------------------------------------------------------
+  const modelMatch = commentBody.match(MODEL_OVERRIDE_REGEX)
+  if (modelMatch) {
+    const modelName = modelMatch[1]
+    core.info(`@${commenterLogin} requested model override: ${modelName}`)
+    await postComment(octokit, ctx,
+      `🔄 @${commenterLogin} Regenerating quiz with model \`${modelName}\`… A new quiz will be posted shortly.`)
+    await octokit.rest.actions.createWorkflowDispatch({
+      owner: repo.owner,
+      repo: repo.repo,
+      workflow_id: 'quiz-generate.yml',
+      ref: prData.data.head.ref,
+      inputs: { pr_number: String(prNumber), model_override: modelName },
+    })
+    core.info(`Dispatched quiz-generate.yml with model_override=${modelName} for PR #${prNumber}`)
     return
   }
 
